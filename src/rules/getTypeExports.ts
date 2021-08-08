@@ -11,14 +11,21 @@ enum typeDeclarationTypes {
   'TSTypeAliasDeclaration',
 }
 
-/**
- * Checks if a node is an interface or a type.
- */
-function isType(
-  node: TSESTree.Statement,
-): node is TSESTree.TSInterfaceDeclaration {
-  return Object.keys(typeDeclarationTypes).includes(node.type);
+function isTypedExport(node: TSESTree.Statement): boolean {
+  return (
+    Object.keys(typeDeclarationTypes).includes(node.type) ||
+    'typeAnnotation' in node
+  );
 }
+
+// /**
+//  * Checks if a node is an interface or a type.
+//  */
+// function isType(
+//   node: TSESTree.Statement,
+// ): node is TSESTree.TSInterfaceDeclaration {
+//   return Object.keys(typeDeclarationTypes).includes(node.type);
+// }
 
 /**
  * Given a file's contents this functions creates an AST and finds
@@ -45,13 +52,17 @@ function parseTSTreeForExportedTypes(cacheKey: string, content: string): void {
             if (specifier.local.name === specifier.exported.name) {
               cache.add(specifier.local.name);
             } else {
-              cache.add(`${specifier.local.name} as ${specifier.exported.name}`)
+              cache.add(
+                `${specifier.local.name} as ${specifier.exported.name}`,
+              );
             }
           });
 
-          if (declaration && isType(declaration)) {
-            cache.add(declaration.id.name);
-            typeList.push(declaration.id.name);
+          if (declaration !== null) {
+            if ('id' in declaration && isTypedExport(declaration)) {
+              cache.add(declaration.id.name);
+              typeList.push(declaration.id.name);
+            }
           }
         } else if (
           node.type === 'ExportDefaultDeclaration' &&
@@ -60,7 +71,7 @@ function parseTSTreeForExportedTypes(cacheKey: string, content: string): void {
           cache.add((node.declaration as TSESTree.Identifier).name);
         }
 
-        if (isType(node)) {
+        if (isTypedExport(node)) {
           typeList.push(node.id.name);
         }
       });
@@ -83,6 +94,7 @@ function parseTSTreeForExportedTypes(cacheKey: string, content: string): void {
  */
 function parseFileForTypedExports(
   source: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   context: any,
 ): Set<string> | undefined {
   const path = resolve(source, context);
